@@ -1,3 +1,6 @@
+[Guillaume CLEMENT le 25/03/2025](https://www.linkedin.com/feed/update/urn:li:activity:7310182405049335809/)
+
+
 # Euromillions Transformer Predictor (Exemple Éducatif)
 
 Ce projet illustre l’entraînement d’un modèle **Transformer** pour prédire (de manière purement fictive) les prochains tirages Euromillions. L’objectif est de démontrer les principes du **Deep Learning** et l’utilisation d’un Transformer en PyTorch, sans prétendre réellement prévoir un phénomène aléatoire.
