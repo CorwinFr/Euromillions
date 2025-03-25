@@ -8,8 +8,8 @@
 #        Il n'y a aucune garantie de prévision correcte
 #        des résultats Euromillions.
 #
-# Auteur : [Votre Nom]
-# Date   : [Date du jour]
+# Auteur : Guillaume CLEMENT
+# Date   : 25/03/2025
 ###########################################################
 
 import math
