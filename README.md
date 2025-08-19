@@ -240,3 +240,4 @@ Ensemble, elles offrent une vision complète du défi de prédiction loterie : e
 ---
 
 *"Dans l'incertitude absolue, seule la méthode peut nous guider."* 🎯
+https://www.linkedin.com/in/guillaume-clement-erp-cloud/
