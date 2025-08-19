@@ -1,0 +1,196 @@
+import os
+import pandas as pd
+import chardet
+
+# Chemin vers le dossier contenant les fichiers CSV
+dossier = os.path.join(os.getcwd(), "CSV")
+
+# Liste des colonnes à extraire
+colonnes_requises = ['date_de_tirage', 'boule_1', 'boule_2', 'boule_3', 'boule_4', 'boule_5', 'etoile_1', 'etoile_2', 'fichier_source']
+
+# Liste pour stocker les DataFrames extraits
+liste_dfs = []
+
+# Parcourir tous les fichiers du répertoire
+for fichier in os.listdir(dossier):
+    if fichier.endswith(".csv"):
+        chemin_fichier = os.path.join(dossier, fichier)
+        try:
+            # Détecter l'encodage du fichier
+            with open(chemin_fichier, 'rb') as file:
+                raw_data = file.read()
+                result = chardet.detect(raw_data)
+                encoding = result['encoding']
+            
+            print(f"Encodage détecté pour {fichier}: {encoding}")
+            
+            # Lire le fichier avec pandas en utilisant l'encodage détecté
+            df = pd.read_csv(chemin_fichier, 
+                           encoding=encoding,
+                           sep=';',  # Utiliser le point-virgule comme séparateur
+                           engine='python')  # Utiliser le moteur Python pour plus de flexibilité
+            
+            # Ajouter le nom du fichier source comme colonne
+            df['fichier_source'] = fichier
+            
+            # Nettoyer les noms de colonnes
+            df.columns = df.columns.str.strip().str.lower()
+            # Supprimer les points-virgules à la fin des noms de colonnes
+            df.columns = df.columns.str.rstrip(';')
+            
+            print(f"\nFichier {fichier}:")
+
+            # Vérifier quelles colonnes de la liste existent dans le fichier
+            colonnes_existantes = [col for col in colonnes_requises if col in df.columns]
+            colonnes_manquantes = set(colonnes_requises) - set(df.columns)
+            
+            if colonnes_manquantes:
+                print(f"Attention: Colonnes manquantes dans {fichier}:", colonnes_manquantes)
+            
+            # Créer les colonnes manquantes avec des valeurs NA
+            for col in colonnes_requises:
+                if col not in df.columns:
+                    df[col] = pd.NA
+
+            # Extraire uniquement les colonnes requises
+
+            # Extraire uniquement les colonnes requises
+            df_extrait = df[colonnes_requises]
+            
+            # Vérifier que les données sont bien importées
+            print(f"Nombre de lignes importées: {len(df_extrait)}")
+            print("Exemple de données:")
+            print(df_extrait.head(1))
+            
+            liste_dfs.append(df_extrait)
+            print(f"Fichier {fichier} traité avec succès")
+            
+        except Exception as e:
+            print(f"Erreur lors de la lecture du fichier {fichier}: {str(e)}")
+
+# Vérifier si au moins un DataFrame a été collecté
+if liste_dfs:
+    # Concaténer tous les DataFrames
+    df_global = pd.concat(liste_dfs, ignore_index=True)
+    
+    # Conversion simple des dates
+    print("\nDébut conversion des dates...")
+    
+    # Afficher quelques dates avant conversion pour vérification
+    print("\nExemple de dates avant conversion:")
+    print(df_global['date_de_tirage'].head())
+    
+    def convertir_date(date):
+        if pd.isna(date):
+            return date
+        
+        # Convertir en string et nettoyer
+        date_str = str(date).strip()
+        
+        # Format YYYYMMDD (8 chiffres consécutifs)
+        if date_str.isdigit() and len(date_str) == 8:
+            return f"{date_str[6:8]}/{date_str[4:6]}/{date_str[0:4]}"
+        
+        # Format avec séparateurs (/, -, .)
+        if '/' in date_str or '-' in date_str or '.' in date_str:
+            separator = '/' if '/' in date_str else ('-' if '-' in date_str else '.')
+            parts = date_str.split(separator)
+            if len(parts) == 3:
+                try:
+                    day, month, year = parts
+                    
+                    # Si l'année a 2 chiffres, on l'étend à 4 chiffres
+                    if len(year) == 2:
+                        year_int = int(year)
+                        # Si >= 50, c'est 19XX, sinon c'est 20XX
+                        if year_int >= 50:
+                            year = f"19{year}"
+                        else:
+                            year = f"20{year}"
+                    
+                    # Assurer le format DD/MM/YYYY avec des zéros en tête si nécessaire
+                    if len(year) == 4:
+                        return f"{day.zfill(2)}/{month.zfill(2)}/{year}"
+                except:
+                    pass
+        
+        return date_str
+
+    # Convertir les dates
+    df_global['date_de_tirage'] = df_global['date_de_tirage'].apply(convertir_date)
+    
+    # Afficher quelques dates après conversion pour vérification
+    print("\nExemple de dates après conversion:")
+    print(df_global['date_de_tirage'].head())
+    
+    # Ajouter une colonne pour tracer l'origine du fichier
+    if 'fichier_source' not in df_global.columns:
+        print("\nERREUR : La colonne 'fichier_source' n'existe pas. Vérifiez le code précédent.")
+    
+    # Vérifier les dates invalides ou manquantes
+    problemes_dates = pd.DataFrame()
+    
+    # Vérifier les dates manquantes (NaN)
+    dates_manquantes = df_global[df_global['date_de_tirage'].isna()]
+    if not dates_manquantes.empty:
+        print("\nDates manquantes (NaN) trouvées :")
+        for fichier in dates_manquantes['fichier_source'].unique():
+            lignes = dates_manquantes[dates_manquantes['fichier_source'] == fichier]
+            print(f"\nFichier {fichier}:")
+            for index, row in lignes.iterrows():
+                print(f"- Ligne {index + 1}: Valeurs = {dict(row)}")
+    
+    # Vérifier les dates non converties (pas au format DD/MM/YYYY)
+    dates_valides = df_global[df_global['date_de_tirage'].notna()]
+    dates_non_converties = dates_valides[~dates_valides['date_de_tirage'].str.contains('/', na=False)]
+    
+    if not dates_non_converties.empty:
+        print("\nDates non converties trouvées :")
+        for fichier in dates_non_converties['fichier_source'].unique():
+            lignes = dates_non_converties[dates_non_converties['fichier_source'] == fichier]
+            print(f"\nFichier {fichier}:")
+            for index, row in lignes.iterrows():
+                print(f"- Ligne {index + 1}: Date = {row['date_de_tirage']}")
+    
+    # Sauvegarder le résultat dans un fichier CSV global
+    df_global.to_csv("euromillions.csv", index=False, encoding='utf-8')
+    print("\nLe fichier global 'euromillions.csv' a été créé avec succès.")
+    print(f"Nombre total de tirages: {len(df_global)}")
+
+    # Analyse des tirages par année
+    print("\nAnalyse des tirages par année :")
+    
+    # Fonction pour extraire l'année du format DD/MM/YYYY
+    def extraire_annee(date_str):
+        if isinstance(date_str, str) and '/' in date_str:
+            parts = date_str.split('/')
+            if len(parts) == 3:
+                return int(parts[2])
+        return None
+
+    # Extraire les années
+    df_global['annee'] = df_global['date_de_tirage'].apply(extraire_annee)
+    
+    # Compter le nombre de tirages par année et trier par année
+    tirages_par_annee = df_global.groupby('annee').size().sort_index()
+    
+    # Afficher les résultats
+    print("\nNombre de tirages par année :")
+    for annee, nombre_tirages in tirages_par_annee.items():
+        if annee is not None:  # Ignorer les valeurs None si elles existent
+            print(f"Année {annee}: {nombre_tirages} tirages")
+    
+    # Vérifier s'il y a des dates non traitées
+    dates_problematiques = df_global[df_global['annee'].isna()]['date_de_tirage'].unique()
+    if len(dates_problematiques) > 0:
+        print("\nAttention : Certaines dates n'ont pas pu être traitées :")
+        for date in dates_problematiques:
+            print(f"- {date}")
+    
+    # Supprimer la colonne temporaire 'annee'
+    df_global = df_global.drop('annee', axis=1)
+    
+    # Sauvegarder à nouveau sans la colonne annee
+    df_global.to_csv("euromillions.csv", index=False, encoding='utf-8')
+else:
+    print("Aucun fichier CSV n'a été trouvé dans le répertoire.")

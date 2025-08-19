@@ -1,131 +1,242 @@
-[Guillaume CLEMENT le 25/03/2025](https://www.linkedin.com/feed/update/urn:li:activity:7310182405049335809/)
+# 🎯 Projet de Prédiction EuroMillions
 
+Ce projet implémente **deux approches complémentaires** pour prédire les tirages d'EuroMillions, combinant statistiques avancées, machine learning et intelligence artificielle.
 
-# Euromillions Transformer Predictor (Exemple Éducatif)
+## 🏆 Les Deux Approches
 
-Ce projet illustre l’entraînement d’un modèle **Transformer** pour prédire (de manière purement fictive) les prochains tirages Euromillions. L’objectif est de démontrer les principes du **Deep Learning** et l’utilisation d’un Transformer en PyTorch, sans prétendre réellement prévoir un phénomène aléatoire.
+### 1. 🧮 Le Classement Malin (Stats + ML)
 
-## Table des Matières
-- [Contexte](#contexte)
-- [Avertissements Importants](#avertissements-importants)
-- [Caractéristiques Techniques](#caractéristiques-techniques)
-- [Logique d’Apprentissage](#logique-dapprentissage)
-- [Choix Techniques](#choix-techniques)
-- [Installation et Exécution](#installation-et-exécution)
-- [Usage et Résultats](#usage-et-résultats)
-- [Conclusion](#conclusion)
+**Philosophie** : Traiter chaque numéro comme un joueur de football avec sa propre "forme" et ses caractéristiques.
 
-## Contexte
+#### Comment ça marche ?
 
-**Objectif principal** : Utiliser un Transformer – technologie similaire à celle utilisée par ChatGPT ou Mistral pour prédire des mots – dans un contexte ludique : anticiper (sans validité réelle) des tirages Euromillions.
+Chaque numéro (1-50) et étoile (1-12) est analysé selon plusieurs critères :
 
-**Exemple d’apprentissage** :
-- Lecture des anciens tirages (boules + étoiles).
-- Conversion en séquences numériques.
-- Entraînement d’un modèle pour « deviner » le tirage suivant.
+- **📈 Forme récente** : Fréquence d'apparition sur différentes fenêtres temporelles (10, 25, 50, 100, 200 tirages)
+- **⏰ Temps depuis la dernière apparition** : Combien de tirages se sont écoulés depuis la dernière sortie
+- **🤝 Co-occurrences** : Avec quels autres numéros ce numéro sort-il habituellement ?
+- **📊 Tendances exponentielles** : Pondération décroissante des tirages anciens (demi-vie configurable)
 
-Ce projet est strictement pédagogique : il ne prétend pas fournir de véritables prédictions gagnantes.
+#### Architecture Technique
 
-## Avertissements Importants
-- **Projet Purement Fictif** : Aucune garantie réelle de prédiction.
-- **Aucun Conseil Financier** : Ne pariez jamais votre argent avec ce modèle.
-- **Hasard vs. Modèle** : La loterie reste purement aléatoire, même avec des modèles complexes.
-- **Démonstration Pédagogique** : Objectif pédagogique uniquement.
+1. **🎯 Ranker (LGBMRanker/LambdaMART)** : Classe les numéros du plus au moins prometteur
+2. **🔍 Classifieur (LGBMClassifier)** : Donne une probabilité de sortie pour chaque numéro
+3. **⚖️ Calibration OOF** : Utilise la régression isotonique pour calibrer les probabilités
+4. **🔄 Ensembles multi-fenêtres** : Combine plusieurs modèles entraînés sur différentes périodes
+5. **🎲 Génération de portefeuille** : Crée 20 grilles diversifiées via échantillonnage Gumbel-Top-k
 
-## Caractéristiques Techniques
+#### Fonctionnalités Avancées
 
-- **Langage** : Python (3.7+ recommandé)
-- **Bibliothèques clés** :
-  - PyTorch (Deep Learning)
-  - Pandas (manipulation des données)
-  - NumPy (calcul numérique)
-- **Modèle** : Transformer Seq2Seq avec `batch_first=True`
+- **GPU LightGBM** : Accélération automatique sur GPU avec fallback CPU
+- **Backtest rolling-origin** : Validation sur 20 périodes avec métriques NDCG@K et Recall@K
+- **Visualisations** : Graphiques PNG des performances historiques
+- **Mapping automatique** : Support des CSV français avec colonnes `date_de_tirage`, `boule_1`, etc.
 
-## Logique d’Apprentissage
+### 2. 🦜 Le Perroquet Séquentiel (IA Transformer)
 
-### Chargement et Préparation des Données
-- Lecture CSV des tirages passés (5 boules + 2 étoiles).
-- Tri chronologique et conversion en séquences numériques.
+**Philosophie** : Un modèle Transformer qui "lit" l'historique des tirages et "écrit" des combinaisons plausibles.
 
-### Fenêtrage
-- Définir une fenêtre historique `W` (par ex. `W=100`).
-- Séquences d’entrée : `[i, i+1, ..., i+W-1]`
-- Cible à prédire : tirage `i+W`
+#### Comment ça marche ?
 
-### Séquence d’Entrée (src)
-- Conversion des nombres en tokens, séparés par un token spécial (`0`).
+1. **📚 Apprentissage séquentiel** : Le modèle lit une fenêtre de 60 tirages passés
+2. **🧠 Architecture Transformer** : Encodeur-décodeur avec attention multi-têtes
+3. **🎯 Génération contrainte** : 
+   - Numéros uniques pour les boules (1-50)
+   - Étoiles indépendantes (1-12)
+   - Top-K sampling pour la diversité
+4. **🔀 Aléa contrôlé** : Balance entre cohérence historique et exploration
 
-### Séquence de Sortie (tgt)
-- Introduction d’un token de début (`0`) avec décalage (shift).
+#### Architecture Technique
 
-### Entraînement
-- Utilisation de `Dataset` et `DataLoader`.
-- Masque triangulaire pour éviter la fuite d’information future.
-- Calcul de la perte (CrossEntropy).
+- **Encodeur** : Traite la séquence d'historique (W=60 tirages × 7 numéros + séparateurs)
+- **Décodeur** : Génère séquentiellement les 5 boules puis 2 étoiles
+- **Positional Encoding** : Comprend l'ordre temporel des tirages
+- **Masquage causal** : Empêche le modèle de "tricher" en regardant le futur
 
-### Validation
-- Division des données en Train / Validation (80/20 par défaut).
-- Validation à chaque époque pour contrôler le surapprentissage.
+#### Optimisations GPU
 
-### Génération
-- Méthode d’échantillonnage : `top-k` / `top-p (nucleus)`.
-- Application de règles de filtrage (ex. éviter les doublons).
+- **🚀 CUDA forcé** : Utilisation obligatoire du GPU si disponible
+- **⚡ Précision mixte (AMP)** : Économie de mémoire GPU
+- **📊 Monitoring temps réel** : Suivi de l'utilisation mémoire GPU
+- **🔧 Optimisations avancées** : cuDNN benchmark, TF32 sur Ampere
 
-## Choix Techniques
-- **`batch_first=True`** : Simplifie la gestion des dimensions `[batch_size, seq_len, ...]`.
-- **Fenêtre Glissante (W)** : Plus grande fenêtre augmente la richesse contextuelle mais diminue le nombre d’échantillons et augmente les besoins en ressources.
-- **Dimension du Modèle (D_MODEL)** : Plus grand D_MODEL augmente la capacité du modèle mais aussi sa consommation en mémoire et son temps d'entraînement.
-- **Masque Triangulaire** : Simule l'autoregression.
-- **Top-K / Top-P** : Introduit de la diversité dans les générations, évitant un argmax strict.
+## 🗂️ Structure du Projet
 
-## Installation et Exécution
-
-### Cloner le dépôt :
-```bash
-git clone https://github.com/votre-utilisateur/euromillions-transformer.git
-cd euromillions-transformer
+```
+Poc_Euromillions/
+├── 📊 CSV/                              # Données historiques
+├── 🧮 euromillions_pro_pipeline.py     # Approche 1: Stats + ML
+├── 🦜 Poc_Euromillions.py              # Approche 2: Transformer
+├── 🔮 predict_euromillions.py          # Script de prédiction seule
+├── 🏃 run_euromillions.py              # Orchestrateur principal
+├── 📋 requirements.txt                 # Dépendances
+├── 📈 out_euro_final/                  # Résultats approche 1
+└── 🎯 euromillions.csv                 # Dataset principal
 ```
 
-### Installer les dépendances (dans un venv ou conda recommandé) :
+## 🚀 Installation et Utilisation
+
+### Prérequis
+
 ```bash
 pip install -r requirements.txt
 ```
 
-- Assurez-vous que le fichier `requirements.txt` contient `torch`, `pandas`, `numpy`, etc.
+### Approche 1 : Le Classement Malin
 
-### Fichier CSV :
-- Placer `euromillions.csv` dans le répertoire du projet (ou adapter le chemin).
-
-### Exécution du script :
 ```bash
-python main_euromillions.py
+# Exécution complète avec backtest et génération
+python euromillions_pro_pipeline.py
+
+# Avec GPU forcé
+python euromillions_pro_pipeline.py --gpu
+
+# CSV personnalisé
+python euromillions_pro_pipeline.py --csv mon_fichier.csv --out mes_resultats/
 ```
 
-## Usage et Résultats
+**Sorties** :
+- `backtest_results.csv` : Métriques de performance historique
+- `pred_numbers_next.csv` / `pred_stars_next.csv` : Scores détaillés
+- `portfolio_20_tickets.csv` : 20 grilles diversifiées
+- Graphiques PNG : NDCG, Recall, hits cumulés
 
-Le script réalise :
-- Lecture et préparation des données.
-- Entraînement du modèle (nombre d’époques configurable).
-- Évaluation des performances en validation (perte moyenne).
-- Génération de tirages fictifs via `top-k` / `top-p` sampling.
+### Approche 2 : Le Perroquet Séquentiel
 
-Exemple de sortie :
-```text
-Prédiction n°1 : [12, 45, 3, 17, 36, 2, 9]
-Prédiction n°2 : [10, 49, 6, 22, 28, 1, 3]
+```bash
+# Entraînement + génération
+python Poc_Euromillions.py
+
+# Prédiction seule (modèle pré-entraîné)
+python predict_euromillions.py
+```
+
+**Sorties** :
+- `euromillions_model.pth` : Modèle sauvegardé
+- `predictions_euromillions.csv` : 10 prédictions générées
+- Logs détaillés d'entraînement avec métriques GPU
+
+## ⚙️ Configuration
+
+### Approche 1 (Stats + ML)
+
+```python
+@dataclass
+class Config:
+    pool_numbers: int = 50              # Numéros 1-50
+    pool_stars: int = 12                # Étoiles 1-12
+    windows_numbers: Tuple = (180, 360, 720)  # Fenêtres temporelles
+    half_life_numbers: int = 260        # Demi-vie pondération
+    n_tickets: int = 20                 # Grilles dans le portefeuille
+    gpu_try: bool = True                # Tentative GPU automatique
+```
+
+### Approche 2 (Transformer)
+
+```python
+class Config:
+    W = 60                              # Fenêtre d'historique
+    D_MODEL = 256                       # Dimension du modèle
+    NUM_EPOCHS = 50                     # Époques d'entraînement
+    BATCH_SIZE = 128                    # Taille de batch (GPU)
+    FORCE_GPU = True                    # GPU obligatoire
+    USE_MIXED_PRECISION = True          # AMP pour économie mémoire
+```
+
+## 📊 Métriques et Validation
+
+### Approche 1 : Backtest Rolling-Origin
+
+- **NDCG@5** (numéros) et **NDCG@2** (étoiles) : Mesure la qualité du classement
+- **Recall@5/2** : Proportion de vrais positifs dans le top-K
+- **Hits cumulés** : Évolution du nombre de prédictions correctes
+- **20 splits temporels** : Validation robuste sur données historiques
+
+### Approche 2 : Génération Diversifiée
+
+- **Top-K Sampling** : Balance cohérence/exploration (K=5)
+- **Contraintes de validité** : Respect des règles EuroMillions
+- **Monitoring GPU** : Utilisation mémoire temps réel
+- **Reproductibilité** : Seed fixe pour résultats déterministes
+
+## 🎯 Stratégies de Prédiction
+
+### Fusion Intelligente (Approche 1)
+
+```python
+# Combinaison pondérée ranker + classifieur calibré
+score_final = 0.65 × score_ranker + 0.35 × proba_calibrée
+```
+
+### Génération Séquentielle (Approche 2)
+
+```python
+# Génération pas-à-pas avec contraintes
+for position in [boule1, boule2, ..., etoile2]:
+    proba = softmax(transformer_output)
+    proba[numéros_déjà_tirés] = 0  # Contrainte unicité
+    numéro = top_k_sample(proba, k=5)
+```
+
+## 🔧 Optimisations Techniques
+
+### GPU et Performance
+
+- **Détection automatique CUDA** avec fallback CPU gracieux
+- **Batch processing** optimisé pour GPU (128 échantillons)
+- **Pin memory** et workers multiples pour transferts CPU↔GPU
+- **Gradient clipping** et scheduling adaptatif du learning rate
+
+### Robustesse et Monitoring
+
+- **Gestion d'erreurs GPU** : Retry automatique en mode CPU
+- **Monitoring mémoire** : Affichage temps réel de l'utilisation
+- **Sauvegarde/reprise** : Checkpoints complets avec métadonnées
+- **Validation croisée temporelle** : Respect de la chronologie
+
+## 🎲 Génération de Portefeuilles
+
+### Diversification Intelligente
+
+L'approche 1 génère 20 grilles diversifiées en :
+
+1. **Mélangeant** probabilités calibrées (80%) + scores de rang (20%)
+2. **Échantillonnant** via Gumbel-Top-k pour éviter les doublons
+3. **Garantissant** la diversité avec maximum 1000 tentatives
+
+### Exemple de Sortie
+
+```
+Ticket 01: N [7, 12, 23, 34, 45] | S [3, 8]
+Ticket 02: N [2, 15, 28, 39, 47] | S [5, 11]
 ...
 ```
-> Ces résultats restent essentiellement aléatoires dans ce contexte.
 
-## Conclusion
+## 📈 Résultats et Interprétation
 
-Ce projet est strictement pédagogique, démontrant les capacités techniques d’un Transformer tout en rappelant l’imprévisibilité d’un phénomène réellement aléatoire.
+### Métriques Typiques
 
-**Points Clés :**
-- DataLoader pour un apprentissage structuré.
-- Division claire entre entraînement et validation.
-- Masque triangulaire pour l'autoregression.
-- Utilisation de top-k/top-p pour génération diversifiée.
+- **NDCG@5 numéros** : ~0.15-0.25 (aléatoire = 0.10)
+- **Recall@5 numéros** : ~0.60-0.80 (5 prédictions sur 5 attendus)
+- **Hits cumulés** : Tendance croissante sur le backtest
 
-Amusez-vous à explorer différents paramètres (`W`, `D_MODEL`, `TOP_K`, etc.) et appliquez ces techniques à des cas pratiques : prévisions temporelles, complétion de séquences à dépendances longues, etc.
+### Interprétation
 
+- **Scores élevés** = Numéros/étoiles favoris selon l'historique
+- **Portefeuille diversifié** = Couverture large des possibilités
+- **Backtest positif** = Stratégie historiquement performante
+
+---
+
+## 🤖 Philosophie du Projet
+
+Ce projet illustre deux paradigmes complémentaires :
+
+1. **🧮 L'approche analytique** : Décompose le problème, extrait des features, optimise des métriques
+2. **🦜 L'approche générative** : Apprend les patterns implicites, génère de nouvelles séquences
+
+Ensemble, elles offrent une vision complète du défi de prédiction loterie : entre analyse rationnelle et intuition artificielle.
+
+---
+
+*"Dans l'incertitude absolue, seule la méthode peut nous guider."* 🎯
